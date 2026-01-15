@@ -1,0 +1,73 @@
+{
+  "name": "ai-sdk-provider-gemini-cli-agentic",
+  "version": "0.1.0",
+  "description": "AI SDK v6 provider for Google Gemini CLI agentic mode",
+  "keywords": [
+    "ai-sdk",
+    "gemini",
+    "google",
+    "cli",
+    "language-model",
+    "gemini-2.5",
+    "gemini-3",
+    "agentic",
+    "provider"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist",
+    "dev": "tsup --watch",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run clean && npm run build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@ai-sdk/provider": "^3.0.0",
+    "@ai-sdk/provider-utils": "^4.0.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.28.0",
+    "@types/node": "20.19.6",
+    "ai": "^6.0.3",
+    "eslint": "^9.28.0",
+    "globals": "^16.2.0",
+    "prettier": "^3.4.2",
+    "tsup": "8.5.0",
+    "typescript": "5.6.3",
+    "typescript-eslint": "^8.33.0",
+    "vitest": "^3.2.4",
+    "zod": "^4.1.8"
+  },
+  "peerDependencies": {
+    "zod": "^3.0.0 || ^4.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

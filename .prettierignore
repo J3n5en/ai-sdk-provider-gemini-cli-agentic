@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.nyc_output/
+
+# Generated
+*.d.ts
+
+# Repos/OS
+.DS_Store
+.idea/
+.vscode/
