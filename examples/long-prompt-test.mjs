@@ -116,12 +116,14 @@ async function main() {
       console.log("This may indicate the prompt was truncated or corrupted.");
     }
 
-    if (
-      result.text.includes("I am ready") ||
-      result.text.includes("I'm ready")
-    ) {
-      console.log("\n❌ FAILURE: Got generic 'ready' response instead of actual work.");
-      console.log("The prompt was likely not received correctly.");
+    const isGenericResponse =
+      result.text.toLowerCase().includes("ready") ||
+      result.text.toLowerCase().includes("i am ready") ||
+      result.text.toLowerCase().includes("i'm ready");
+
+    if (isGenericResponse || result.text.length < 200) {
+      console.log("\n❌ FAILURE: Got generic/short response instead of actual work.");
+      console.log("The prompt was likely truncated or corrupted.");
       process.exit(1);
     }
 

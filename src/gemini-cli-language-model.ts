@@ -120,7 +120,6 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
   }
 
   private buildArgs(
-    promptText: string,
     settings: GeminiCliSettings = this.settings
   ): { cmd: string; args: string[]; env: NodeJS.ProcessEnv; cwd?: string; shell: boolean } {
     const base = resolveGeminiPath(settings.geminiPath, settings.allowNpx);
@@ -175,8 +174,9 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
       }
     }
 
-    // Prompt as positional argument
-    args.push(promptText);
+    // Prompt is passed via stdin to avoid command line length limits and escaping issues
+    // Use '-' to read prompt from stdin
+    args.push('-');
 
     const env: NodeJS.ProcessEnv = {
       ...process.env,
@@ -241,9 +241,9 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
     });
     const effectiveSettings = this.mergeSettings(providerOptions);
 
-    const { cmd, args, env, cwd, shell } = this.buildArgs(promptText, effectiveSettings);
+    const { cmd, args, env, cwd, shell } = this.buildArgs(effectiveSettings);
 
-    this.logger.debug(`[gemini-cli] Executing: ${cmd} ${args.slice(0, -1).join(' ')} [prompt]`);
+    this.logger.debug(`[gemini-cli] Executing: ${cmd} ${args.join(' ')}`);
 
     let text = '';
     let usage: LanguageModelV3Usage = createEmptyUsage();
@@ -251,7 +251,12 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
     const content: LanguageModelV3Content[] = [];
     const toolResults = new Map<string, { toolName: string }>();
 
-    const child = spawn(cmd, args, { env, cwd, shell, stdio: ['ignore', 'pipe', 'pipe'] });
+    // Use stdin to pass prompt - avoids command line length limits and escaping issues on Windows
+    const child = spawn(cmd, args, { env, cwd, shell, stdio: ['pipe', 'pipe', 'pipe'] });
+
+    // Write prompt to stdin
+    child.stdin.write(promptText);
+    child.stdin.end();
 
     // Abort support
     let onAbort: (() => void) | undefined;
@@ -399,9 +404,9 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
     });
     const effectiveSettings = this.mergeSettings(providerOptions);
 
-    const { cmd, args, env, cwd, shell } = this.buildArgs(promptText, effectiveSettings);
+    const { cmd, args, env, cwd, shell } = this.buildArgs(effectiveSettings);
 
-    this.logger.debug(`[gemini-cli] Streaming: ${cmd} ${args.slice(0, -1).join(' ')} [prompt]`);
+    this.logger.debug(`[gemini-cli] Streaming: ${cmd} ${args.join(' ')}`);
 
     const model = this;
     const abortSignal = options.abortSignal;
@@ -409,7 +414,12 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
     const stream = new ReadableStream<LanguageModelV3StreamPart>({
       start(controller) {
         const startTime = Date.now();
-        const child = spawn(cmd, args, { env, cwd, shell, stdio: ['ignore', 'pipe', 'pipe'] });
+        // Use stdin to pass prompt - avoids command line length limits and escaping issues on Windows
+        const child = spawn(cmd, args, { env, cwd, shell, stdio: ['pipe', 'pipe', 'pipe'] });
+
+        // Write prompt to stdin
+        child.stdin.write(promptText);
+        child.stdin.end();
 
         controller.enqueue({ type: 'stream-start', warnings });
 
