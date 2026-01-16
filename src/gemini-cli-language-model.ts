@@ -59,6 +59,25 @@ function mapGeminiFinishReason(status?: string): LanguageModelV3FinishReason {
   }
 }
 
+function resolveGeminiPath(
+  explicitPath?: string,
+  allowNpx?: boolean,
+): { cmd: string; args: string[] } {
+  if (explicitPath) {
+    // `geminiPath` may be either a JS entrypoint (e.g. `.../bin/gemini.js`) or an executable
+    // (e.g. `/usr/local/bin/gemini`). Only force `node` for explicit JS files.
+    const lower = explicitPath.toLowerCase();
+    if (lower.endsWith('.js') || lower.endsWith('.mjs') || lower.endsWith('.cjs')) {
+      return { cmd: 'node', args: [explicitPath] };
+    }
+    return { cmd: explicitPath, args: [] };
+  }
+
+  // Use npx if allowed, otherwise fall back to PATH
+  if (allowNpx) return { cmd: 'npx', args: ['-y', '@google/gemini-cli'] };
+  return { cmd: 'gemini', args: [] };
+}
+
 export class GeminiCliLanguageModel implements LanguageModelV3 {
   readonly specificationVersion = 'v3' as const;
   readonly provider = 'gemini-cli';
@@ -103,9 +122,12 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
   private buildArgs(
     promptText: string,
     settings: GeminiCliSettings = this.settings
-  ): { cmd: string; args: string[]; env: NodeJS.ProcessEnv; cwd?: string } {
-    const cmd = settings.geminiPath ?? 'gemini';
-    const args: string[] = [];
+  ): { cmd: string; args: string[]; env: NodeJS.ProcessEnv; cwd?: string; shell: boolean } {
+    const base = resolveGeminiPath(settings.geminiPath, settings.allowNpx);
+    const cmd = base.cmd;
+    const args: string[] = [...base.args];
+    // Use shell on Windows for commands that need .cmd resolution (gemini, npx)
+    const shell = process.platform === 'win32' && (base.cmd === 'npx' || base.cmd === 'gemini');
 
     // Output format: always use stream-json
     args.push('--output-format', 'stream-json');
@@ -161,7 +183,7 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
       ...(settings.env || {}),
     };
 
-    return { cmd, args, env, cwd: settings.cwd };
+    return { cmd, args, env, cwd: settings.cwd, shell };
   }
 
   private mapWarnings(options: LanguageModelV3CallOptions): SharedV3Warning[] {
@@ -219,7 +241,7 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
     });
     const effectiveSettings = this.mergeSettings(providerOptions);
 
-    const { cmd, args, env, cwd } = this.buildArgs(promptText, effectiveSettings);
+    const { cmd, args, env, cwd, shell } = this.buildArgs(promptText, effectiveSettings);
 
     this.logger.debug(`[gemini-cli] Executing: ${cmd} ${args.slice(0, -1).join(' ')} [prompt]`);
 
@@ -229,7 +251,7 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
     const content: LanguageModelV3Content[] = [];
     const toolResults = new Map<string, { toolName: string }>();
 
-    const child = spawn(cmd, args, { env, cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(cmd, args, { env, cwd, shell, stdio: ['ignore', 'pipe', 'pipe'] });
 
     // Abort support
     let onAbort: (() => void) | undefined;
@@ -377,7 +399,7 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
     });
     const effectiveSettings = this.mergeSettings(providerOptions);
 
-    const { cmd, args, env, cwd } = this.buildArgs(promptText, effectiveSettings);
+    const { cmd, args, env, cwd, shell } = this.buildArgs(promptText, effectiveSettings);
 
     this.logger.debug(`[gemini-cli] Streaming: ${cmd} ${args.slice(0, -1).join(' ')} [prompt]`);
 
@@ -387,7 +409,7 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
     const stream = new ReadableStream<LanguageModelV3StreamPart>({
       start(controller) {
         const startTime = Date.now();
-        const child = spawn(cmd, args, { env, cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+        const child = spawn(cmd, args, { env, cwd, shell, stdio: ['ignore', 'pipe', 'pipe'] });
 
         controller.enqueue({ type: 'stream-start', warnings });
 

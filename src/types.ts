@@ -27,6 +27,11 @@ export interface GeminiCliSettings {
   geminiPath?: string;
 
   /**
+   * Allow falling back to `npx @google/gemini-cli` if the binary cannot be resolved.
+   */
+  allowNpx?: boolean;
+
+  /**
    * Working directory for CLI operations.
    */
   cwd?: string;

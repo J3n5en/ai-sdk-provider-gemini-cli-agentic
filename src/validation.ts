@@ -11,6 +11,7 @@ const loggerFunctionSchema = z.object({
 const settingsSchema = z
   .object({
     geminiPath: z.string().optional(),
+    allowNpx: z.boolean().optional(),
     cwd: z.string().optional(),
     includeDirectories: z.array(z.string().min(1)).optional(),
     approvalMode: z.enum(['default', 'auto_edit', 'yolo']).optional(),

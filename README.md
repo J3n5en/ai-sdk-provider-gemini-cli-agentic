@@ -21,7 +21,7 @@ This provider spawns `gemini` as a subprocess with `--output-format stream-json`
 
 ## Requirements
 
-- [Gemini CLI](https://github.com/google-gemini/gemini-cli) installed and authenticated
+- [Gemini CLI](https://github.com/google-gemini/gemini-cli) installed and authenticated (or use `allowNpx: true`)
 - Node.js 18+
 - AI SDK v6+
 
@@ -31,10 +31,18 @@ This provider spawns `gemini` as a subprocess with `--output-format stream-json`
 npm install ai-sdk-provider-gemini-cli-agentic ai
 ```
 
-### Install Gemini CLI
+### Install Gemini CLI (Optional)
+
+**Option 1**: Install globally (recommended for frequent use):
 
 ```bash
-npm install -g @anthropic-ai/gemini-cli
+npm install -g @google/gemini-cli
+```
+
+**Option 2**: Use `allowNpx: true` to run via npx (no global install needed):
+
+```javascript
+geminiCli('auto', { allowNpx: true })
 ```
 
 Then authenticate:
@@ -108,6 +116,7 @@ const model = geminiCli('gemini-2.5-flash', {
 | Setting | Type | Description |
 |---------|------|-------------|
 | `geminiPath` | `string` | Path to Gemini CLI executable (default: `'gemini'`) |
+| `allowNpx` | `boolean` | Allow falling back to `npx @google/gemini-cli` if CLI not found |
 | `cwd` | `string` | Working directory for CLI operations |
 | `approvalMode` | `'default' \| 'auto_edit' \| 'yolo'` | Tool approval behavior |
 | `yolo` | `boolean` | Auto-approve all operations (alias for `approvalMode: 'yolo'`) |
