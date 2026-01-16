@@ -1,6 +1,6 @@
 {
   "name": "ai-sdk-provider-gemini-cli-agentic",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "AI SDK v6 provider for Google Gemini CLI agentic mode",
   "keywords": [
     "ai-sdk",
