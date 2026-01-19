@@ -1,4 +1,5 @@
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import treeKill from 'tree-kill';
 import { randomUUID } from 'node:crypto';
 import type {
   LanguageModelV3,
@@ -260,39 +261,8 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
     });
 
     // Helper to kill the process tree
-    const killProcessTree = (pid: number, signal: NodeJS.Signals = 'SIGTERM') => {
-      try {
-        if (isWin) {
-          // On Windows, use taskkill to kill the process tree
-          spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' });
-        } else {
-          // On Unix, use pgrep to find all descendant processes and kill them recursively
-          try {
-            const result = spawnSync('pgrep', ['-P', String(pid)], { encoding: 'utf-8' });
-            if (result.stdout) {
-              const childPids = result.stdout
-                .trim()
-                .split('\n')
-                .filter(Boolean)
-                .map(Number);
-              // Recursively kill children first (deepest first)
-              for (const childPid of childPids) {
-                killProcessTree(childPid, signal);
-              }
-            }
-          } catch {
-            // pgrep may not exist or fail, continue to kill main process
-          }
-          // Kill the main process
-          try {
-            process.kill(pid, signal);
-          } catch {
-            // Process may have already exited
-          }
-        }
-      } catch {
-        // Ignore errors
-      }
+    const killProcessTree = (pid: number, signal: string = 'SIGTERM') => {
+      treeKill(pid, signal);
     };
 
     // Write prompt to stdin
@@ -464,38 +434,8 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
           detached: !isWin,
         });
 
-        const killProcessTree = (pid: number, signal: NodeJS.Signals = 'SIGTERM') => {
-          try {
-            if (isWin) {
-              spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' });
-            } else {
-              // On Unix, use pgrep to find all descendant processes and kill them recursively
-              try {
-                const result = spawnSync('pgrep', ['-P', String(pid)], { encoding: 'utf-8' });
-                if (result.stdout) {
-                  const childPids = result.stdout
-                    .trim()
-                    .split('\n')
-                    .filter(Boolean)
-                    .map(Number);
-                  // Recursively kill children first (deepest first)
-                  for (const childPid of childPids) {
-                    killProcessTree(childPid, signal);
-                  }
-                }
-              } catch {
-                // pgrep may not exist or fail, continue to kill main process
-              }
-              // Kill the main process
-              try {
-                process.kill(pid, signal);
-              } catch {
-                // Process may have already exited
-              }
-            }
-          } catch {
-            // Ignore errors
-          }
+        const killProcessTree = (pid: number, signal: string = 'SIGTERM') => {
+          treeKill(pid, signal);
         };
 
         child.stdin.write(promptText);
