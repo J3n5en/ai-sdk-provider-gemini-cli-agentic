@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import type {
   LanguageModelV3,
@@ -260,22 +260,38 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
     });
 
     // Helper to kill the process tree
-    const killProcessTree = (signal: NodeJS.Signals = 'SIGTERM') => {
-      if (child.pid) {
+    const killProcessTree = (pid: number, signal: NodeJS.Signals = 'SIGTERM') => {
+      try {
         if (isWin) {
           // On Windows, use taskkill to kill the process tree
-          spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+          spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' });
         } else {
-          // On Unix, kill the entire process group (negative pid)
+          // On Unix, use pgrep to find all descendant processes and kill them recursively
           try {
-            process.kill(-child.pid, signal);
+            const result = spawnSync('pgrep', ['-P', String(pid)], { encoding: 'utf-8' });
+            if (result.stdout) {
+              const childPids = result.stdout
+                .trim()
+                .split('\n')
+                .filter(Boolean)
+                .map(Number);
+              // Recursively kill children first (deepest first)
+              for (const childPid of childPids) {
+                killProcessTree(childPid, signal);
+              }
+            }
+          } catch {
+            // pgrep may not exist or fail, continue to kill main process
+          }
+          // Kill the main process
+          try {
+            process.kill(pid, signal);
           } catch {
             // Process may have already exited
-            child.kill(signal);
           }
         }
-      } else {
-        child.kill(signal);
+      } catch {
+        // Ignore errors
       }
     };
 
@@ -287,10 +303,10 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
     let onAbort: (() => void) | undefined;
     if (options.abortSignal) {
       if (options.abortSignal.aborted) {
-        killProcessTree();
+        child.pid && killProcessTree(child.pid);
         throw options.abortSignal.reason ?? new Error('Request aborted');
       }
-      onAbort = () => killProcessTree();
+      onAbort = () => child.pid && killProcessTree(child.pid);
       options.abortSignal.addEventListener('abort', onAbort, { once: true });
     }
 
@@ -448,19 +464,37 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
           detached: !isWin,
         });
 
-        const killProcessTree = (signal: NodeJS.Signals = 'SIGTERM') => {
-          if (child.pid) {
+        const killProcessTree = (pid: number, signal: NodeJS.Signals = 'SIGTERM') => {
+          try {
             if (isWin) {
-              spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+              spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' });
             } else {
+              // On Unix, use pgrep to find all descendant processes and kill them recursively
               try {
-                process.kill(-child.pid, signal);
+                const result = spawnSync('pgrep', ['-P', String(pid)], { encoding: 'utf-8' });
+                if (result.stdout) {
+                  const childPids = result.stdout
+                    .trim()
+                    .split('\n')
+                    .filter(Boolean)
+                    .map(Number);
+                  // Recursively kill children first (deepest first)
+                  for (const childPid of childPids) {
+                    killProcessTree(childPid, signal);
+                  }
+                }
               } catch {
-                child.kill(signal);
+                // pgrep may not exist or fail, continue to kill main process
+              }
+              // Kill the main process
+              try {
+                process.kill(pid, signal);
+              } catch {
+                // Process may have already exited
               }
             }
-          } else {
-            child.kill(signal);
+          } catch {
+            // Ignore errors
           }
         };
 
@@ -475,10 +509,10 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
         let lastStatus: string | undefined;
         const toolResults = new Map<string, { toolName: string }>();
 
-        const onAbort = () => killProcessTree();
+        const onAbort = () => child.pid && killProcessTree(child.pid);
         if (abortSignal) {
           if (abortSignal.aborted) {
-            killProcessTree();
+            child.pid && killProcessTree(child.pid);
             controller.error(abortSignal.reason ?? new Error('Request aborted'));
             return;
           }
