@@ -250,14 +250,11 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
     const toolResults = new Map<string, { toolName: string }>();
 
     // Use stdin to pass prompt - avoids command line length limits and escaping issues on Windows
-    // Use detached: true on Unix to create a new process group, enabling killing all child processes
-    const isWin = process.platform === 'win32';
     const child = spawn(cmd, args, {
       env,
       cwd,
       shell,
       stdio: ['pipe', 'pipe', 'pipe'],
-      detached: !isWin,
     });
 
     // Helper to kill the process tree
@@ -428,13 +425,11 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
     const stream = new ReadableStream<LanguageModelV3StreamPart>({
       start(controller) {
         const startTime = Date.now();
-        const isWin = process.platform === 'win32';
         const child = spawn(cmd, args, {
           env,
           cwd,
           shell,
           stdio: ['pipe', 'pipe', 'pipe'],
-          detached: !isWin,
         });
 
         const killProcessTree = (pid: number, signal: string = 'SIGTERM') => {
