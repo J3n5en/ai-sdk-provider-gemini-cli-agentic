@@ -355,6 +355,9 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
         });
 
         child.on('close', (code: number | null) => {
+          // Clean up any remaining child processes (e.g., MCP servers)
+          child.pid && killProcessTree(child.pid);
+
           const duration = Date.now() - startTime;
           if (code === 0) {
             this.logger.info(`[gemini-cli] Completed in ${duration}ms`);
@@ -550,6 +553,9 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
         });
 
         child.on('close', (code: number | null) => {
+          // Clean up any remaining child processes (e.g., MCP servers)
+          child.pid && killProcessTree(child.pid);
+
           const duration = Date.now() - startTime;
           if (abortSignal) {
             abortSignal.removeEventListener('abort', onAbort);
