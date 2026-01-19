@@ -11,11 +11,7 @@ import type {
 } from '@ai-sdk/provider';
 import { NoSuchModelError } from '@ai-sdk/provider';
 import { generateId, parseProviderOptions } from '@ai-sdk/provider-utils';
-import type {
-  GeminiCliSettings,
-  GeminiCliProviderOptions,
-  Logger,
-} from './types.js';
+import type { GeminiCliSettings, GeminiCliProviderOptions, Logger } from './types.js';
 import {
   parseStreamJsonLine,
   isInitEvent,
@@ -111,17 +107,20 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
       approvalMode: providerOptions.approvalMode ?? this.settings.approvalMode,
       yolo: providerOptions.yolo ?? this.settings.yolo,
       sandbox: providerOptions.sandbox ?? this.settings.sandbox,
-      includeDirectories:
-        providerOptions.includeDirectories ?? this.settings.includeDirectories,
+      includeDirectories: providerOptions.includeDirectories ?? this.settings.includeDirectories,
       allowedTools: providerOptions.allowedTools ?? this.settings.allowedTools,
       allowedMcpServerNames:
         providerOptions.allowedMcpServerNames ?? this.settings.allowedMcpServerNames,
     };
   }
 
-  private buildArgs(
-    settings: GeminiCliSettings = this.settings
-  ): { cmd: string; args: string[]; env: NodeJS.ProcessEnv; cwd?: string; shell: boolean } {
+  private buildArgs(settings: GeminiCliSettings = this.settings): {
+    cmd: string;
+    args: string[];
+    env: NodeJS.ProcessEnv;
+    cwd?: string;
+    shell: boolean;
+  } {
     const base = resolveGeminiPath(settings.geminiPath, settings.allowNpx);
     const cmd = base.cmd;
     const args: string[] = [...base.args];
@@ -208,9 +207,7 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
 
   private handleSpawnError(err: unknown, promptExcerpt: string): Error {
     const e =
-      err && typeof err === 'object'
-        ? (err as { message?: unknown; code?: unknown })
-        : undefined;
+      err && typeof err === 'object' ? (err as { message?: unknown; code?: unknown }) : undefined;
     const message = String((e?.message ?? err) || 'Failed to run Gemini CLI');
     if (/login|auth|unauthorized/i.test(message)) {
       return createAuthenticationError(message);
@@ -223,7 +220,7 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
   }
 
   async doGenerate(
-    options: Parameters<LanguageModelV3['doGenerate']>[0]
+    options: Parameters<LanguageModelV3['doGenerate']>[0],
   ): Promise<Awaited<ReturnType<LanguageModelV3['doGenerate']>>> {
     this.logger.debug(`[gemini-cli] Starting doGenerate request with model: ${this.modelId}`);
 
@@ -252,7 +249,35 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
     const toolResults = new Map<string, { toolName: string }>();
 
     // Use stdin to pass prompt - avoids command line length limits and escaping issues on Windows
-    const child = spawn(cmd, args, { env, cwd, shell, stdio: ['pipe', 'pipe', 'pipe'] });
+    // Use detached: true on Unix to create a new process group, enabling killing all child processes
+    const isWin = process.platform === 'win32';
+    const child = spawn(cmd, args, {
+      env,
+      cwd,
+      shell,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      detached: !isWin,
+    });
+
+    // Helper to kill the process tree
+    const killProcessTree = (signal: NodeJS.Signals = 'SIGTERM') => {
+      if (child.pid) {
+        if (isWin) {
+          // On Windows, use taskkill to kill the process tree
+          spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+        } else {
+          // On Unix, kill the entire process group (negative pid)
+          try {
+            process.kill(-child.pid, signal);
+          } catch {
+            // Process may have already exited
+            child.kill(signal);
+          }
+        }
+      } else {
+        child.kill(signal);
+      }
+    };
 
     // Write prompt to stdin
     child.stdin.write(promptText);
@@ -262,10 +287,10 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
     let onAbort: (() => void) | undefined;
     if (options.abortSignal) {
       if (options.abortSignal.aborted) {
-        child.kill('SIGTERM');
+        killProcessTree();
         throw options.abortSignal.reason ?? new Error('Request aborted');
       }
-      onAbort = () => child.kill('SIGTERM');
+      onAbort = () => killProcessTree();
       options.abortSignal.addEventListener('abort', onAbort, { once: true });
     }
 
@@ -332,7 +357,7 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
                   message: event.error,
                   stderr,
                   promptExcerpt,
-                })
+                }),
               );
             }
           }
@@ -356,7 +381,7 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
                 exitCode: code ?? undefined,
                 stderr,
                 promptExcerpt,
-              })
+              }),
             );
           }
         });
@@ -386,7 +411,7 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
   }
 
   async doStream(
-    options: Parameters<LanguageModelV3['doStream']>[0]
+    options: Parameters<LanguageModelV3['doStream']>[0],
   ): Promise<Awaited<ReturnType<LanguageModelV3['doStream']>>> {
     this.logger.debug(`[gemini-cli] Starting doStream request with model: ${this.modelId}`);
 
@@ -414,10 +439,31 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
     const stream = new ReadableStream<LanguageModelV3StreamPart>({
       start(controller) {
         const startTime = Date.now();
-        // Use stdin to pass prompt - avoids command line length limits and escaping issues on Windows
-        const child = spawn(cmd, args, { env, cwd, shell, stdio: ['pipe', 'pipe', 'pipe'] });
+        const isWin = process.platform === 'win32';
+        const child = spawn(cmd, args, {
+          env,
+          cwd,
+          shell,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          detached: !isWin,
+        });
 
-        // Write prompt to stdin
+        const killProcessTree = (signal: NodeJS.Signals = 'SIGTERM') => {
+          if (child.pid) {
+            if (isWin) {
+              spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+            } else {
+              try {
+                process.kill(-child.pid, signal);
+              } catch {
+                child.kill(signal);
+              }
+            }
+          } else {
+            child.kill(signal);
+          }
+        };
+
         child.stdin.write(promptText);
         child.stdin.end();
 
@@ -429,11 +475,10 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
         let lastStatus: string | undefined;
         const toolResults = new Map<string, { toolName: string }>();
 
-        // Abort support
-        const onAbort = () => child.kill('SIGTERM');
+        const onAbort = () => killProcessTree();
         if (abortSignal) {
           if (abortSignal.aborted) {
-            child.kill('SIGTERM');
+            killProcessTree();
             controller.error(abortSignal.reason ?? new Error('Request aborted'));
             return;
           }
@@ -493,7 +538,9 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
                 type: 'tool-result',
                 toolCallId: event.tool_id,
                 toolName: toolInfo?.toolName ?? 'unknown',
-                result: event.output as unknown as NonNullable<import('@ai-sdk/provider').JSONValue>,
+                result: event.output as unknown as NonNullable<
+                  import('@ai-sdk/provider').JSONValue
+                >,
                 isError: event.status === 'error',
               });
               continue;
@@ -513,7 +560,7 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
                   message: event.error,
                   stderr,
                   promptExcerpt,
-                })
+                }),
               );
               return;
             }
@@ -555,7 +602,7 @@ export class GeminiCliLanguageModel implements LanguageModelV3 {
                 exitCode: code ?? undefined,
                 stderr,
                 promptExcerpt,
-              })
+              }),
             );
           }
         });

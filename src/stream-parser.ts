@@ -15,8 +15,15 @@ import type { LanguageModelV3Usage, JSONObject } from '@ai-sdk/provider';
  */
 export function parseStreamJsonLine(line: string): GeminiStreamEvent | null {
   try {
-    const event = JSON.parse(line) as Record<string, unknown>;
-    if (!event.type || typeof event.type !== 'string') return null;
+    const event: unknown = JSON.parse(line);
+    if (
+      !event ||
+      typeof event !== 'object' ||
+      !('type' in event) ||
+      typeof event.type !== 'string'
+    ) {
+      return null;
+    }
     return event as GeminiStreamEvent;
   } catch {
     return null;
